@@ -1,0 +1,415 @@
+---
+title: "Cookies"
+author: "Omar Vasquez Duque"
+date: "6/10/2021"
+output: pdf_document
+---
+
+```{r}
+library(readr)
+df1 <- read_csv("~/Downloads/Test Cookies.csv")
+
+```
+
+
+```{r}
+#Remove vars
+
+library(tidyverse)
+
+library(janitor)
+
+df1 <- df1 %>% 
+  clean_names() %>% 
+  select(-(recorded_date:user_language)) %>% 
+  select(-(q22_last_click:q22_click_count)) %>% 
+  select(-(q23_last_click:q23_click_count)) %>% 
+  select(-random_id, -(start_date:progress))
+
+#Remove first two rows
+
+df1 <- df1 %>% 
+  slice(-c(1,2))
+
+# Gen new vars
+
+# Manipulation var
+
+df <- df1 %>% 
+  mutate(highlighted = as.factor(ifelse(fl_10_do == "Block5", 1, 0)),
+         duration_in_seconds = as.numeric(duration_in_seconds))
+
+# First click
+dfclick <- df %>% 
+  mutate(first_click = as.numeric(ifelse(!is.na(df$q22_first_click), 
+                                         df$q22_first_click, df$q23_first_click)))
+         
+#Explore first click
+
+library(psych)
+
+#Filter excessive duration
+
+dfclickfiltered <- dfclick %>% 
+  filter(duration_in_seconds < 500,
+         first_click > 0) 
+
+  describe(dfclickfiltered$first_click)
+  
+dfclick %>% 
+  ggplot(aes(x=duration_in_seconds)) +
+  geom_histogram(color = "black", fill = "darkturquoise") +
+  theme_bw() +
+  labs(title = "Completion Time (in seconds)") +
+  theme(text = element_text(family = "Times New Roman"))
+
+
+ 
+  t.test(first_click ~ highlighted, data = dfclickfiltered)
+  
+dfclickmorefiltered <- dfclickfiltered %>% 
+  filter(first_click < 55) 
+
+dfclickmorefiltered2 <- dfclickfiltered %>% 
+  filter(first_click < 20) 
+
+t.test(first_click ~ highlighted, data = dfclickmorefiltered)
+
+
+t.test(first_click ~ highlighted, data = dfclickmorefiltered2)
+```
+
+```{r}
+#Histogram first click
+ggplot(dfclickfiltered, aes(x=first_click, fill= highlighted)) +
+  geom_histogram(position = "identity", alpha = 0.4) +
+  theme_bw() +
+  theme(text = element_text(family = "Times New Roman"))
+
+
+ggplot(dfclickmorefiltered, aes(x=first_click, fill= highlighted)) +
+  geom_histogram(position = "identity", alpha = 0.4) +
+  theme_bw() +
+  theme(text = element_text(family = "Times New Roman"))
+```
+
+```{r}
+library(stargazer)
+
+#Creating Object for Stargazer
+dffirstclick <- dfclickfiltered %>% 
+  as.data.frame() %>% 
+  select(first_click) %>% 
+  drop_na(first_click)
+
+#Separate by condition
+dffirsthigh <- dfclickfiltered %>% 
+  as.data.frame() %>% 
+  filter(highlighted == 1) %>% 
+  select(first_click)
+
+dffirstneu <- dfclickfiltered %>% 
+  as.data.frame() %>% 
+  filter(highlighted == 0) %>% 
+  select(first_click)
+
+# All the struggle was because data frames are set up as lists!!!!
+
+stargazer(dffirsthigh, type = "html",  title="Descriptive statistics", digits=1, out = "tabfirstclickhigh.doc")
+
+stargazer(dffirstneu, type = "html",  title="Descriptive statistics", digits=1, out = "tabfirstclickneu.doc")
+
+```
+
+
+```{r}
+
+#Check duration 
+
+ggplot(data = df, aes(x=duration_in_seconds)) +
+  geom_histogram()
+
+df.filtered <- df %>% 
+  filter(duration_in_seconds < 480)
+
+summary(df$duration_in_seconds)
+```
+
+```{r}
+#Main dependent var
+
+dffinal <- dfclickfiltered %>% 
+  mutate(acceptall = ifelse(!is.na(dfclickfiltered$q1_1), dfclickfiltered$q1_1, dfclickfiltered$q1_2))
+         
+
+typeof(dffinal$acceptall)
+
+#transform variables 
+
+dffinal <- dffinal %>% 
+  mutate(acceptall = factor(acceptall,levels = c("1", "2"), labels = c("yes", "no")),
+         highlighted = factor(highlighted, levels = c("0", "1"), labels = c("no", "yes")))
+         
+
+
+table(df$q12)
+table(df$q13)
+```
+
+```{r}
+typeof(dffinal$acceptall)
+```
+
+
+```{r}
+#Main finding
+
+maintable <- table(dffinal$highlighted, dffinal$acceptall)
+
+names(dimnames(maintable)) <- c("Highlighted", "Accept all")
+
+maintable
+
+chisq.test(maintable)
+                                        
+maintableprop <- prop.table(maintable)
+
+maintableprop
+
+addmargins(maintable)
+
+mosaicplot(maintable, color = "darkturquoise", title(main = "Accept all Cookies Treatment and Control"))
+
+# library(ggmosaic)
+# 
+# 
+# typeof(dffinal$highlighted)
+# 
+# library(extrafont)
+# loadfonts(device = "pdf", quiet = FALSE)
+# library(ggthemes)
+# 
+# ggplot(data = dffinal) +
+#   geom_mosaic(aes(x=product(acceptall),
+#                   fill = acceptall,
+#                   conds = product(highlighted))) +
+# theme(text = element_text(family = "Times New Roman")) +
+#   xlab("Highlighted") +
+#   scale_x_discrete(labels = c('No','Yes'))
+
+mosaicplot1 <- vcd::mosaic(acceptall ~ highlighted, 
+            highlighting_fill = c("grey90", "cornflowerblue"), 
+            labeling_args = list(set_varnames = c(acceptall = "Accept all", highlighted = "Highlighted")),
+            dffinal)
+
+
+tabledf <- as.data.frame(maintable)
+
+mainplot <- ggplot(data = tabledf, aes(x = Highlighted, y = Freq, fill = Accept.all)) +
+  geom_col() +
+  theme_bw() +
+ theme(text = element_text(family = "Times New Roman"))
+
+ggsave("mainplotcookies.pdf", plot = mainplot, width = 4, height = 4)
+       
+mainplot     
+      
+```
+
+```{r}
+library(summarytools)
+
+tableexport <- ctable(x = dffinal$highlighted, y = dffinal$acceptall, prop = "r", chisq = TRUE)
+
+view(tableexport, file = "~/tabcookies.doc")
+
+```
+
+```{r}
+#Another way. This one worked a lot better!
+
+library(sjPlot)
+
+sjPlot::tab_xtab(var.row = dffinal$highlighted, var.col = dffinal$acceptall, title = "Acceptance of all Cookies per Experimental Condition", show.row.prc = TRUE)
+```
+
+
+```{r}
+#Check balance
+
+library(vtable)
+
+dfbalance <- df %>% 
+  select(q12:q15, highlighted) %>% 
+  mutate(gender = q12,
+         educ = q13,
+         comp_use = q14,
+         years_comp = q15) %>% 
+  select(gender, educ, comp_use, years_comp, highlighted)
+
+dflogreg <- dffinal %>% 
+  select(q12:q15, highlighted, acceptall) %>% 
+  mutate(gender = as.numeric(q12),
+         educ = as.numeric(q13),
+         comp_use = as.numeric(q14),
+         years_comp = as.numeric(q15),
+         highnum = ifelse(highlighted == "yes", 1,0),
+         acceptallnum = ifelse(acceptall == "yes", 1, 0)) %>% 
+  select(gender, educ, comp_use, years_comp, highnum, acceptallnum)
+
+#I should have used rename function
+
+sumtable(dfbalance, group = "highlighted", group.test = TRUE)
+```
+
+
+```{r}
+#Check main result with logistic regression
+
+logreg1 <- glm(data = dflogreg, formula = acceptallnum ~ highnum + educ + comp_use + years_comp, family = "binomial")
+
+#Result doesn't make sense!
+
+#Check with linear model
+
+lm1 <- lm(data = dflogreg, formula = acceptallnum ~ highnum + gender + educ + comp_use + years_comp)
+
+#Problem with factors
+```
+
+
+```{r}
+summary(logreg1)
+
+dflogtransf0 <- data.frame(highnum = 0, gender = 1, educ = 5, comp_use = 4, years_comp = 4)
+
+dflogtransf1 <- data.frame(highnum = 1, gender = 1, educ = 5, comp_use = 4, years_comp = 4)
+
+predict(logreg1, dflogtransf0, type = "response")
+
+predict(logreg1, dflogtransf1, type = "response")
+
+summary(lm1)
+```
+
+```{r}
+#output regression
+
+stargazer(logreg1, lm1, type = "html", title = "Regression Models Accounting for Covariates Imbalance", out = "Logreg.doc", header = FALSE)
+```
+
+```{r}
+#filter data only "more information" and see what cookies people feel comfortable sharing
+
+dfmoreinfo <- dffinal %>% 
+  filter(q1_1 == 2 | q1_2 == 2) %>% 
+  select(q2_1:q2_4) %>% 
+  rename(necessary = q2_1,
+         functionality = q2_2,
+         tracking = q2_3,
+         advertising = q2_4)
+
+table(dfmoreinfo$necessary)
+
+table(dfmoreinfo$functionality)
+
+table(dfmoreinfo$tracking)
+
+table(dfmoreinfo$advertising)
+
+summary(dfmoreinfo)
+
+#32 observations
+
+32/182
+
+tabcookies <- matrix(c(21, 16, 11, 10, 11, 16, 21, 22), ncol=4, byrow = TRUE)
+
+tabcookies
+
+colnames(tabcookies) <-c("Essential", "Functionality", "Tracking", "Targeting & Ads")
+
+rownames(tabcookies) <- c("Accept", "Reject")
+
+tabcookies <-as.table(tabcookies)
+
+dftabcookies <-as.data.frame(tabcookies)
+
+dftabcookies <- rename(dftabcookies, Decision = Var1, Type = Var2)
+```
+
+```{r}
+#Plot Cookies Preferences
+
+library(extrafont)
+
+plotcookies <- ggplot(data = dftabcookies, aes(x = Type, y = Freq, fill = Decision)) +
+  geom_col(alpha = 0.8) +
+  theme_bw() +
+ theme(text = element_text(family = "Times New Roman")) 
+  #theme(axis.title.x = element_text(vjust=-1.5))
+  #theme(axis.text.x = element_text(angle = 45, vjust = 0, hjust=0))
+
+ggsave("plotcookies.pdf", plotcookies, device = "pdf", width = 5.5, height = 3.5)
+```
+
+
+```{r}
+#Gen var private product
+dffinal <- dffinal %>% 
+  mutate(Privateprod = ifelse(q3_0_1_rank ==1|
+                                q4_0_1_rank==2|
+                                q5_0_1_rank ==3,1,0))
+
+mean(dffinal$Privateprod)
+```
+
+```{r}
+#cross Tab Accept All and Private Product
+
+tabprivate <-table(dffinal$acceptall, dffinal$Privateprod)
+
+tabprivate
+
+```
+
+```{r}
+#CReate vars opinions about cookies
+library(ggthemes)
+
+dffinal <- dffinal %>% 
+  rename(per_ad_s = q6,
+         per_ad_g = q7,
+         op_collect_info = q8)
+
+#Plots
+
+library(RColorBrewer)
+
+ggplot(dffinal, aes(x=per_ad_s)) +
+  geom_bar(fill = "darkturquoise") +
+  theme_bw() +
+  scale_x_discrete(labels=c("1" = "Definetely", "2" = "Probably", "3" = "Might or Might Not", "4" = "Probably Not", "5" = "Definetely Not")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+
+```
+
+```{r}
+ggplot(dffinal, aes(x=per_ad_g)) +
+  geom_bar(fill = "darkturquoise") +
+  theme_bw() +
+  scale_x_discrete(labels=c("1" = "Like a great deal", "2" = "Like somewhat", "3" = "Neither like nor dislike", "4" = "Dislike somewhat", "5" = "Dislike a great deal")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+
+```{r}
+
+ggplot(dffinal, aes(x=op_collect_info)) +
+  geom_bar(fill = "darkturquoise") +
+  theme_bw() +
+  scale_x_discrete(labels=c("1" = "Like a great deal", "2" = "Like somewhat", "3" = "Neither like nor dislike", "4" = "Dislike somewhat", "5" = "Dislike a great deal")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+  
+```
+
